@@ -1,0 +1,18 @@
+# requirements file
+# note which revision of python, for example 3.9.6
+
+python-dotenv
+pandas
+tqdm
+requests
+beautifulsoup4  
+lxml
+chromadb
+streamlit
+langchain_community
+langchain
+langchain-groq
+slack_bolt
+slack_sdk
+sentence_transformers
+langchain-chroma
