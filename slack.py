@@ -6,7 +6,7 @@ import logging
 from chat import Chat
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 # logging.basicConfig(level=logging.DEBUG)
 
 if os.getenv("SLACK_BOT_TOKEN") is None or os.getenv("SLACK_BOT_TOKEN") == "":

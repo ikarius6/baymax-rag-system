@@ -4,9 +4,11 @@ from dotenv import load_dotenv
 import pandas as pd
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(override=True)
 confluence_domain = os.getenv("CONFLUENCE_DOMAIN")
 confluence_token = os.getenv("CONFLUENCE_TOKEN")
 space_key = os.getenv("CONFLUENCE_SPACE_KEY")
@@ -16,10 +18,25 @@ team_key = os.getenv("CONFLUENCE_TEAM_KEY")
 with open('cookie.txt', 'r') as file:
     cookie = file.read()
 
+# Function to create a session with retry strategy
+def create_session_with_retries():
+    session = requests.Session()
+    retry = Retry(
+        total=5,  # Total number of retries
+        backoff_factor=1,  # Exponential backoff factor
+        status_forcelist=[429, 500, 502, 503, 504]  # HTTP status codes to retry on
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+session = create_session_with_retries()
+
 # Function to make an API call
 def api_call(url):
     try:
-        response = requests.get(url, headers={'Authorization': "Bearer " + confluence_token, 'Cookie': cookie})
+        response = session.get(url, headers={'Authorization': "Bearer " + confluence_token, 'Cookie': cookie})
         response.raise_for_status()
         if response.status_code == 200:
             return response.json()
@@ -53,7 +70,7 @@ def fetch_child_pages(page_id):
     if json_data:
         return json_data.get('results', [])
     else:
-        print(f"Error: Could not fetch child pages for page ID {page_id}.")
+        print(f"Warning: Could not fetch child pages for page ID {page_id}.")
         return []
 
 # Function to create an empty DataFrame    
@@ -235,8 +252,8 @@ def main():
     df = create_dataframe()
     df = add_all_pages_to_dataframe(df, all_pages)
     df = set_index_of_dataframe(df)
-    df = delete_internal_only_records(df)
-    print("Removed internal_only records")
+    # df = delete_internal_only_records(df)
+    # print("Removed internal_only records")
     print("Adding content to DataFrame...")
     df = add_content_to_dataframe(df)
     save_dataframe_to_csv(df, csv_file)

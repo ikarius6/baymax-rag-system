@@ -6,7 +6,7 @@ from langchain_community.embeddings.huggingface import HuggingFaceBgeEmbeddings
 from langchain.globals import set_verbose
 
 set_verbose(True)
-load_dotenv()
+load_dotenv(override=True)
 
 embed_model = HuggingFaceBgeEmbeddings(
     model_name='BAAI/bge-m3',

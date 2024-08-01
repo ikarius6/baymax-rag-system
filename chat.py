@@ -10,13 +10,14 @@ import os
 class Chat:
     def __init__(self, source):
         self.source = source
-        load_dotenv()
+        load_dotenv(override=True)
 
         # if GROQ_API_KEY exist use GROQ, else use local Llama3
         if os.getenv("GROQ_API_KEY") and os.getenv("GROQ_API_KEY") != "":
             llm = ChatGroq(
                 temperature=0,
-                model="llama3-70b-8192",
+                # check limits https://console.groq.com/settings/limits
+                model="llama-3.1-8b-instant",
             )
         else:
             llm = Ollama(
@@ -33,6 +34,7 @@ class Chat:
 
         vector_store, chroma_client = get_chroma_vector_store('confluence_docs', embed_model, './chroma_db')
         retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+        team_key = os.getenv("CONFLUENCE_TEAM_KEY")
         prompt_template = """You are a support agent for the TEAM-team called Baymax, use the following pieces of context that comes from the TEAM-team documents and give a detailed anwser. If you don't know the answer, just say that you don't know, don't try to make up an answer.
 
         {context}
