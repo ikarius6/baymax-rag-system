@@ -2,9 +2,22 @@
 
 This RAG system fetches information from your private Confluence as a CSV file, vectorizes and stores the embeddings in ChromaDB, and then uses it via Streamlit or as a Slack bot, interpreting the result with Llama 3.
 
-## Project Structure
+**GraphRAG mode** adds a Neo4j knowledge graph for richer, relationship-aware retrieval — surfacing related pages, shared entities, and topic communities that flat vector search would miss.
 
-RAG Flow Chart: Please refer to the rag_flowchart.png in the repository for a visual representation of the system workflow. 
+## Architecture
+
+### Standard RAG Pipeline
+```
+Confluence API → app_confluence.py → CSV → index_generator.py → ChromaDB → chat.py → LLM → Streamlit/Slack
+```
+
+### GraphRAG Pipeline (enhanced)
+```
+Confluence API → app_confluence.py → CSV + hierarchy + links
+                                      ├── index_generator.py → ChromaDB ──┐
+                                      └── graph_builder.py → Neo4j ───────┤
+                                                                          ├── GraphRetriever → LLM → Streamlit/Slack
+```
 
 ![RAG Flow Chart](./rag_flowchart.png)
 
@@ -12,15 +25,8 @@ RAG Flow Chart: Please refer to the rag_flowchart.png in the repository for a vi
 
 - Python 3.8+
 - Python packages listed in `requirements.txt`
-- `.env` file with the following variables:
-  - `CONFLUENCE_DOMAIN`
-  - `CONFLUENCE_TOKEN`
-  - `CONFLUENCE_SPACE_KEY`
-  - `CONFLUENCE_TEAM_KEY`
-  - `SLACK_BOT_TOKEN`
-  - `SLACK_APP_TOKEN`
-  - `SLACK_SIGNING_SECRET`
-  - `GROQ_API_KEY` (optional, for using Groq)
+- `.env` file (see `.env.example`)
+- Docker (for Neo4j, if using GraphRAG)
 - If you are using a fully local installation, install Llama3 (it should require a good GPU in your system)
 
 ## Demo
@@ -41,28 +47,28 @@ python -m venv venv
 source venv/bin/activate
 ```
 
-Install the necessary packages:
+Install PyTorch with CUDA support (required for GPU acceleration, especially RTX 50-series Blackwell GPUs):
+```sh
+pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
+```
+
+Install the remaining packages:
 ```sh
 pip install -r requirements.txt
 ```
 
-Create a `.env` file in the root directory with the required environment variables.
+Create a `.env` file in the root directory with the required environment variables (see `.env.example`).
 
-```yml
-# Confluence
-CONFLUENCE_DOMAIN="https://yourconfluence.com"
-CONFLUENCE_TOKEN=""
-CONFLUENCE_SPACE_KEY="SPACE_KEY"
-CONFLUENCE_TEAM_KEY="TEAM"
+## Neo4j Setup (GraphRAG)
 
-# Groq
-GROQ_API_KEY=""
-
-# Slack
-SLACK_BOT_TOKEN=''
-SLACK_APP_TOKEN=''
-SLACK_SIGNING_SECRET=''
+Start Neo4j with Docker:
+```sh
+docker compose up -d
 ```
+
+This starts Neo4j Community 5 with the Graph Data Science plugin. Access the browser at [http://localhost:7474](http://localhost:7474).
+
+Default credentials: `neo4j` / `changeme` (change `NEO4J_PASSWORD` in your `.env`).
 
 ## Llama3 with Ollama
 
@@ -73,15 +79,15 @@ Install Ollama in your system
 curl -fsSL https://ollama.com/install.sh | sh
 ```
 
-Download llama3 and start the ollama server
+Download llama4 and start the ollama server
 ```sh
-ollama pull llama3
+ollama pull llama4
 ollama serve
 ```
 
-## Llama3 with Groq
+## Llama4 with Groq
 
-To use a remote version of Llama3, enable the Grop API by getting your own `GROQ_API_KEY`
+To use a remote version of Llama4, enable the Grop API by getting your own `GROQ_API_KEY`
 - Go to [https://console.groq.com/keys](https://console.groq.com/keys)
 - Generate a new token
 - Ad it to `GROQ_API_KEY` in your `.env` 
@@ -104,42 +110,77 @@ For `SLACK_BOT_TOKEN` go to OAuth & Permissions > OAuth Tokens > Bot User OAuth 
 
 ## Usage
 
-### Fetch Data from Confluence
+### 1. Fetch Data from Confluence
 
 Make sure you have the `cookie.txt` file with the session to avoid SSO issues. The cookie can be extracted for any request in the [confluence](https:/yourconfluence.com) page.
-
-Run `app_confluence.py` to fetch data from Confluence and save it as a CSV file, the process could take a few minutes:
 
 ```sh
 python app_confluence.py
 ```
 
-This process going to create data/kb.csv file with all the necessary data for the next step.
+This creates `data/kb.csv`, `data/page_hierarchy.csv`, and `data/page_links.csv`.
 
-### Generate Embeddings
-
-Run `index_generator.py` to generate embeddings and save them in ChromaDB, this process need to download an embedding model from HuggingFace so the process could take several minutes:
-
+**Subsequent runs are incremental** — only new/modified pages are fetched:
 ```sh
-python index_generator.py
+python app_confluence.py          # Incremental (default)
+python app_confluence.py --full   # Force full re-download
 ```
 
-Once your vector database is populated you can use your chatbot with Streamlit or as a Slack app.
+### 2. Generate Embeddings
 
-### Use in Streamlit
+Uses `BAAI/bge-m3` (configurable via `EMBED_MODEL` in `.env`):
 
-Run `streamlit.py` to start the Streamlit application:
+```sh
+python index_generator.py          # Only embeds new documents
+python index_generator.py --full   # Re-embed everything
+```
 
+### 3. Build Knowledge Graph (GraphRAG)
+
+Extracts entities using Llama 4 Scout and builds the graph in Neo4j:
+
+```sh
+python graph_builder.py            # Incremental (skips already-processed pages)
+python graph_builder.py --full     # Wipe graph and rebuild from scratch
+```
+
+Open the Neo4j Browser to explore:
+```cypher
+MATCH (p:Page)-[r]->(q) RETURN p, r, q LIMIT 50
+```
+
+### 4. Sharing Pre-Built Databases
+
+You can share your databases so other users skip steps 1-3 entirely:
+
+- **ChromaDB**: Copy the `./chroma_db/` folder
+- **Neo4j**: Export the Docker volume or use `apoc.export`
+- **CSV Data**: Copy the `./data/` folder
+
+The recipient only needs to:
+```sh
+docker compose up -d
+streamlit run streamlit.py -- --use-graph
+```
+
+### 5. Use the Chatbot
+
+#### Streamlit (standard mode)
 ```sh
 streamlit run streamlit.py
 ```
 
-### Use in Slack
+#### Streamlit (GraphRAG mode)
+```sh
+USE_GRAPH=true streamlit run streamlit.py
+```
 
-- Set up your application in Slack and get the necessary tokens by using the Slack Setup section.
+Or pass the flag:
+```sh
+streamlit run streamlit.py -- --use-graph
+```
 
-Run `slack.py` to start the Slack bot:
-
+#### Slack
 ```sh
 python slack.py
 ```
@@ -147,19 +188,28 @@ python slack.py
 ## Project Files
 
 ### `app_confluence.py`
-Code to fetch data from Confluence and save it as a CSV file.
+Fetches pages from Confluence, extracts content, page hierarchy, and cross-page links.
 
 ### `index_generator.py`
-Code to generate embeddings and save them in ChromaDB.
+Generates embeddings using FlagEmbedding (`bge-multilingual-gemma2`) with batch processing and upserts to ChromaDB.
+
+### `graph_builder.py`
+Builds a Neo4j knowledge graph: page nodes, hierarchy/link relationships, entity extraction via Llama 4 Scout, and community detection.
+
+### `graph_retriever.py`
+Hybrid retriever combining vector search + graph expansion + community context + optional BGE reranking.
 
 ### `chat.py`
-Code for the query logic using the stored embeddings.
+Query logic with `--use-graph` toggle for switching between standard and GraphRAG retrieval.
 
 ### `streamlit.py`
-Code for the Streamlit user interface.
+Streamlit user interface.
 
 ### `slack.py`
-Code for the Slack integration.
+Slack integration.
 
 ### `utils.py`
-Helper methods to simplify the operation
+Helper methods for ChromaDB, embeddings, and response processing.
+
+### `docker-compose.yml`
+Docker Compose configuration for Neo4j.

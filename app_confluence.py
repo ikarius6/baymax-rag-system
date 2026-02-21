@@ -1,5 +1,10 @@
 import requests
 import os
+import re
+import sys
+import json
+from datetime import datetime, timezone
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -14,6 +19,7 @@ confluence_token = os.getenv("CONFLUENCE_TOKEN")
 space_key = os.getenv("CONFLUENCE_SPACE_KEY")
 team_key = os.getenv("CONFLUENCE_TEAM_KEY")
 
+# TODO: Implement Hulu SSO Login
 # Get cookie.txt with the session to avoid SSO issues
 with open('cookie.txt', 'r') as file:
     cookie = file.read()
@@ -65,7 +71,7 @@ def fetch_team_page_id():
 
 # Function to fetch child pages
 def fetch_child_pages(page_id):
-    url = f'{confluence_domain}/rest/api/content/{page_id}/child/page?limit=999'
+    url = f'{confluence_domain}/rest/api/content/{page_id}/child/page?limit=999&expand=version'
     json_data = api_call(url)
     if json_data:
         return json_data.get('results', [])
@@ -76,7 +82,7 @@ def fetch_child_pages(page_id):
 # Function to create an empty DataFrame    
 def create_dataframe():
     try:
-        columns = ['id', 'type', 'status', 'tiny_link', 'title', 'content', 'is_internal']
+        columns = ['id', 'type', 'status', 'tiny_link', 'title', 'content', 'is_internal', 'parent_id', 'last_modified']
         df = pd.DataFrame(columns=columns)
         return df
     except Exception as e:
@@ -95,12 +101,15 @@ def add_all_pages_to_dataframe(df, all_pages):
 
     for page in all_pages:
         try:
+            last_modified = page.get('version', {}).get('when', '')
             new_record = [{
                 'id': page.get('id', ''),
                 'type': page.get('type', ''),
                 'status': page.get('status', ''),
                 'tiny_link': page.get('_links', {}).get('tinyui', ''),
-                'title': page.get('title', '')
+                'title': page.get('title', ''),
+                'parent_id': page.get('parent_id', ''),
+                'last_modified': last_modified
             }]
 
             # Add new records to the DataFrame
@@ -187,36 +196,63 @@ def delete_internal_only_records(df):
 
     return df
 
-def add_content_to_dataframe(df):
-    # Check if the input is a pandas DataFrame
+def extract_cross_page_links(html_content, source_page_id, all_page_ids):
+    """Extract links from HTML that point to other Confluence pages in the same space."""
+    links = []
+    if not html_content:
+        return links
+    try:
+        soup = BeautifulSoup(html_content, "lxml")
+        for a_tag in soup.find_all('a', href=True):
+            href = a_tag['href']
+            # Match Confluence internal links: /display/SPACE/Title or /pages/viewpage.action?pageId=XXXX
+            page_id_match = re.search(r'pageId=(\d+)', href)
+            if page_id_match:
+                target_id = page_id_match.group(1)
+                if target_id in all_page_ids and target_id != str(source_page_id):
+                    links.append({'source_id': str(source_page_id), 'target_id': target_id})
+            # Also match ri:content-title links (Confluence storage format)
+            for link_tag in soup.find_all('ri:page', attrs={'ri:content-title': True}):
+                title = link_tag.get('ri:content-title', '')
+                links.append({'source_id': str(source_page_id), 'target_title': title})
+    except Exception as e:
+        print(f"Warning: Could not extract links from page {source_page_id}: {e}")
+    return links
+
+def add_content_to_dataframe(df, all_page_ids=None):
+    """Fetch page content from Confluence and extract cross-page links."""
     if not isinstance(df, pd.DataFrame):
         print("Error: The variable 'df' must be a pandas DataFrame.")
-        return df
+        return df, []
 
-    # Wrap the loop in tqdm for progress tracking
-    for page_id, row in tqdm(df.iterrows(), total=df.shape[0], desc="Updating DataFrame"):
+    if all_page_ids is None:
+        all_page_ids = set(str(pid) for pid in df.index)
+
+    all_links = []
+
+    for page_id, row in tqdm(df.iterrows(), total=df.shape[0], desc="Fetching page content"):
         html_content = fetch_page_content(page_id)
 
         if html_content is not None:
             try:
-                # Parse the HTML content
                 soup = BeautifulSoup(html_content, "lxml")
 
-                # Extract text with proper spacing
                 text_parts = []
                 for element in soup.stripped_strings:
                     text_parts.append(element)
 
                 page_content = ' '.join(text_parts)
-
-                # Update the DataFrame with the extracted content
                 df.loc[page_id, 'content'] = page_content
+
+                # Extract cross-page links
+                page_links = extract_cross_page_links(html_content, page_id, all_page_ids)
+                all_links.extend(page_links)
             except Exception as e:
                 print(f"Error processing HTML content for page ID {page_id}: {e}")
         else:
             print(f"Warning: Could not fetch content for page ID {page_id}.")
 
-    return df
+    return df, all_links
 
 def save_dataframe_to_csv(df, filename):
     if not isinstance(df, pd.DataFrame):
@@ -229,34 +265,126 @@ def save_dataframe_to_csv(df, filename):
         except Exception as e:
             print(f"An error occurred while saving the DataFrame to CSV: {e}")
 
-def fetch_all_pages_recursively(page_id, all_pages):
+def save_hierarchy_csv(df, filename='./data/page_hierarchy.csv'):
+    """Save page parent-child hierarchy to CSV."""
+    if not isinstance(df, pd.DataFrame) or 'parent_id' not in df.columns:
+        print("Error: DataFrame must have a 'parent_id' column.")
+        return
+    hierarchy = df[['parent_id']].copy()
+    hierarchy.index.name = 'child_id'
+    hierarchy['title'] = df['title'] if 'title' in df.columns else ''
+    os.makedirs('./data', exist_ok=True)
+    hierarchy.to_csv(filename, index=True)
+    print(f"Hierarchy saved ({len(hierarchy)} records) to {filename}")
+
+def save_links_csv(links, filename='./data/page_links.csv'):
+    """Save extracted cross-page links to CSV."""
+    if not links:
+        print("No cross-page links found.")
+        return
+    links_df = pd.DataFrame(links)
+    os.makedirs('./data', exist_ok=True)
+    links_df.to_csv(filename, index=False)
+    print(f"Cross-page links saved ({len(links_df)} records) to {filename}")
+
+def fetch_all_pages_recursively(page_id, all_pages, parent_id=None):
+    """Recursively fetch child pages, tracking parent_id for hierarchy."""
     child_pages = fetch_child_pages(page_id)
     for page in child_pages:
+        page['parent_id'] = str(page_id)
         all_pages.append(page)
-        fetch_all_pages_recursively(page['id'], all_pages)
+        fetch_all_pages_recursively(page['id'], all_pages, page_id)
     return all_pages
+
+SYNC_STATE_FILE = './data/.last_sync'
+
+def load_sync_state():
+    """Load the last sync timestamp."""
+    if os.path.exists(SYNC_STATE_FILE):
+        with open(SYNC_STATE_FILE, 'r') as f:
+            data = json.load(f)
+            return data.get('last_sync', None)
+    return None
+
+def save_sync_state():
+    """Save the current sync timestamp."""
+    os.makedirs('./data', exist_ok=True)
+    with open(SYNC_STATE_FILE, 'w') as f:
+        json.dump({'last_sync': datetime.now(timezone.utc).isoformat()}, f)
 
 def main():
     csv_file = './data/kb.csv'
-    
+    full_sync = '--full' in sys.argv
+    last_sync = None if full_sync else load_sync_state()
+
+    if full_sync:
+        print("🔄 Full sync mode (--full flag)")
+    elif last_sync:
+        print(f"⚡ Incremental sync (changes since {last_sync})")
+    else:
+        print("🔄 First run — full sync")
+
     print(f"Fetching '{team_key}' page ID...")
     team_page_id = fetch_team_page_id()
     if not team_page_id:
         print(f"Failed to fetch '{team_key}' page ID. Exiting.")
         return
-    
+
     print(f"Fetching all pages under '{team_key}'...")
     all_pages = fetch_all_pages_recursively(team_page_id, [])
-
     print(f"Total pages fetched: {len(all_pages)}")
+
+    # Build full page list DataFrame
     df = create_dataframe()
     df = add_all_pages_to_dataframe(df, all_pages)
     df = set_index_of_dataframe(df)
-    # df = delete_internal_only_records(df)
-    # print("Removed internal_only records")
-    print("Adding content to DataFrame...")
-    df = add_content_to_dataframe(df)
+
+    # Incremental: filter to only new/modified pages
+    if last_sync and not full_sync:
+        existing_df = None
+        if os.path.exists(csv_file):
+            existing_df = pd.read_csv(csv_file, index_col='id', dtype={'id': str})
+            existing_df.index = existing_df.index.astype(str)
+
+        changed_mask = df['last_modified'].apply(
+            lambda x: x > last_sync if pd.notna(x) and x else True
+        )
+        changed_ids = set(df[changed_mask].index)
+        new_ids = set(df.index) - set(existing_df.index) if existing_df is not None else set(df.index)
+        pages_to_process = changed_ids | new_ids
+
+        if not pages_to_process:
+            print("✅ No new or modified pages found. Nothing to sync.")
+            save_sync_state()
+            return
+
+        print(f"⚡ Processing {len(pages_to_process)} new/modified pages (skipping {len(df) - len(pages_to_process)} unchanged)")
+
+        # Only fetch content for changed pages
+        df_to_fetch = df.loc[df.index.isin(pages_to_process)]
+        all_page_ids = set(str(pid) for pid in df.index)
+        df_to_fetch, cross_links = add_content_to_dataframe(df_to_fetch, all_page_ids)
+
+        # Merge with existing data
+        if existing_df is not None:
+            existing_df.update(df_to_fetch)
+            new_pages = df_to_fetch.loc[~df_to_fetch.index.isin(existing_df.index)]
+            df = pd.concat([existing_df, new_pages])
+        else:
+            df = df_to_fetch
+    else:
+        # Full sync: fetch all content
+        print("Adding content to DataFrame...")
+        all_page_ids = set(str(pid) for pid in df.index)
+        df, cross_links = add_content_to_dataframe(df, all_page_ids)
+
     save_dataframe_to_csv(df, csv_file)
+
+    # Save hierarchy and cross-page links for GraphRAG
+    save_hierarchy_csv(df)
+    save_links_csv(cross_links)
+    save_sync_state()
+    print(f"✅ Sync complete. State saved to {SYNC_STATE_FILE}")
 
 if __name__ == "__main__":
     main()
