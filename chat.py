@@ -55,7 +55,7 @@ class Chat:
 
             retriever = GraphRetriever(
                 vector_store=vector_store,
-                vector_k=5,
+                vector_k=15,
                 final_k=10,
                 use_reranker=os.getenv("USE_RERANKER", "false").lower() == "true",
             )
