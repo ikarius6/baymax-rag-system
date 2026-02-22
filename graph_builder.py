@@ -305,6 +305,11 @@ class GraphBuilder:
             with self.driver.session() as session:
                 # Create Entity nodes and MENTIONED_IN relationships
                 for entity in result.get("entities", []):
+                    # Handle LLM returning plain strings instead of dicts
+                    if isinstance(entity, str):
+                        entity = {"name": entity, "type": "concept"}
+                    if not isinstance(entity, dict):
+                        continue
                     name = entity.get("name", "").strip()
                     etype = entity.get("type", "concept").strip().lower()
                     if not name:
@@ -326,6 +331,8 @@ class GraphBuilder:
 
                 # Create inter-entity relationships
                 for rel in result.get("relations", []):
+                    if not isinstance(rel, dict):
+                        continue
                     src = rel.get("source", "").strip()
                     tgt = rel.get("target", "").strip()
                     rtype = rel.get("relation", "related_to").strip().upper().replace(" ", "_")

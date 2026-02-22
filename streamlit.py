@@ -1,7 +1,11 @@
 import streamlit as st
 from chat import Chat
 
-chat = Chat('streamlit')
+@st.cache_resource
+def get_chat():
+    return Chat('streamlit')
+
+chat = get_chat()
 
 st.title("💬 Baymax")
 

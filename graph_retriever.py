@@ -6,6 +6,7 @@ optional BGE reranking for richer, context-aware retrieval.
 """
 
 import os
+import time
 from typing import List, Any
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
@@ -41,10 +42,21 @@ class GraphRetriever(BaseRetriever):
         return GraphDatabase.driver(self.neo4j_uri, auth=(self.neo4j_user, self.neo4j_password))
 
     def _get_relevant_documents(self, query: str, **kwargs) -> List[Document]:
+        t_start = time.time()
+        print(f"\n  📡 [GraphRetriever] query: {query[:80]}...")
+
         # Step 1: Vector search
-        vector_results = self.vector_store.similarity_search_with_relevance_scores(query, k=self.vector_k)
+        print("  ⏳ [Step 1] Vector search...")
+        t = time.time()
+        try:
+            vector_results = self.vector_store.similarity_search_with_relevance_scores(query, k=self.vector_k)
+        except Exception as e:
+            print(f"  ❌ [Step 1 ERROR] {type(e).__name__}: {e}")
+            raise
+        print(f"  ✅ [Step 1] Vector search returned {len(vector_results)} results in {time.time()-t:.2f}s")
 
         if not vector_results:
+            print("  ⚠️  No vector results, returning empty")
             return []
 
         # Collect page IDs and scores from vector results
@@ -54,31 +66,55 @@ class GraphRetriever(BaseRetriever):
             page_id = doc.metadata.get("source", "")
             page_scores[page_id] = score
             page_docs[page_id] = doc
+        print(f"  📄 Page IDs from vector: {list(page_scores.keys())}")
 
         # Step 2: Graph expansion
-        driver = self._get_neo4j_driver()
+        print("  ⏳ [Step 2] Connecting to Neo4j...")
+        t = time.time()
+        try:
+            driver = self._get_neo4j_driver()
+        except Exception as e:
+            print(f"  ❌ [Step 2 ERROR] Neo4j connection failed: {type(e).__name__}: {e}")
+            raise
+        print(f"  ✅ Neo4j driver created in {time.time()-t:.2f}s")
+
         graph_docs = {}
         try:
             with driver.session() as session:
+                print("  ⏳ [Step 2] Graph expansion for each page...")
+                t = time.time()
                 for page_id in list(page_scores.keys()):
+                    print(f"    🔗 Expanding page: {page_id}")
                     neighbors = self._expand_from_page(session, page_id)
+                    print(f"    → {len(neighbors)} neighbors found")
                     for neighbor in neighbors:
                         nid = neighbor["page_id"]
                         if nid not in page_scores and nid not in graph_docs:
                             graph_docs[nid] = neighbor
+                print(f"  ✅ [Step 2] Graph expansion done in {time.time()-t:.2f}s, {len(graph_docs)} new docs")
 
                 # Step 3: Community context
+                print("  ⏳ [Step 3] Community context...")
+                t = time.time()
                 top_page_id = max(page_scores, key=page_scores.get) if page_scores else None
                 community_pages = []
                 if top_page_id:
                     community_pages = self._get_community_context(session, top_page_id)
+                print(f"  ✅ [Step 3] Community context: {len(community_pages)} pages in {time.time()-t:.2f}s")
 
                 # Get entity context for all vector results
+                print("  ⏳ [Step 4] Entity context...")
+                t = time.time()
                 entity_context = self._get_entity_context(session, list(page_scores.keys()))
+                print(f"  ✅ [Step 4] Entity context in {time.time()-t:.2f}s: {entity_context[:100] if entity_context else '(none)'}")
+        except Exception as e:
+            print(f"  ❌ [Neo4j ERROR] {type(e).__name__}: {e}")
+            raise
         finally:
             driver.close()
 
-        # Step 4: Merge and build final documents
+        # Step 5: Merge and build final documents
+        print("  ⏳ [Step 5] Merging documents...")
         all_docs = []
 
         # Add vector results first (highest priority)
@@ -120,10 +156,17 @@ class GraphRetriever(BaseRetriever):
                 all_docs.append(doc)
                 seen_ids.add(cpid)
 
-        # Step 5: Optional reranking
-        if self.use_reranker and len(all_docs) > 1:
-            all_docs = self._rerank(query, all_docs)
+        print(f"  📊 Total docs before rerank: {len(all_docs)} (vector={len(page_docs)}, graph={len(graph_docs)}, community={len(community_pages)})")
 
+        # Step 6: Optional reranking (cap input to avoid GPU overload)
+        if self.use_reranker and len(all_docs) > 1:
+            rerank_limit = self.final_k * 2  # only rerank top candidates
+            print(f"  ⏳ [Step 6] Reranking top {min(len(all_docs), rerank_limit)} of {len(all_docs)} docs...")
+            t = time.time()
+            all_docs = self._rerank(query, all_docs[:rerank_limit])
+            print(f"  ✅ [Step 6] Reranking done in {time.time()-t:.2f}s")
+
+        print(f"  ✅ [GraphRetriever DONE] Returning {min(len(all_docs), self.final_k)} docs, total time: {time.time()-t_start:.2f}s")
         return all_docs[: self.final_k]
 
     def _expand_from_page(self, session, page_id: str) -> list:
