@@ -28,11 +28,12 @@ class Chat:
         if os.getenv("GROQ_API_KEY") and os.getenv("GROQ_API_KEY") != "":
             llm = ChatGroq(
                 temperature=0,
-                model=chat_model or "llama-3.1-8b-instant",
+                model=chat_model or "meta-llama/llama-4-scout-17b-16e-instruct",
             )
         else:
+            # ollama qwen3:14b for local
             llm = Ollama(
-                model=chat_model or "llama3",
+                model=chat_model or "qwen3:14b",
                 temperature=0,
                 base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
             )
@@ -59,10 +60,10 @@ class Chat:
                 final_k=10,
                 use_reranker=os.getenv("USE_RERANKER", "false").lower() == "true",
             )
-            print("🔗 GraphRAG mode enabled (vector + graph retrieval)")
+            print("GraphRAG mode enabled (vector + graph retrieval)")
         else:
             retriever = vector_store.as_retriever(search_kwargs={"k": 5})
-            print("📄 Standard vector retrieval mode")
+            print("Standard vector retrieval mode")
 
         # --- Prompt ---
         team_key = os.getenv("CONFLUENCE_TEAM_KEY")
@@ -100,33 +101,33 @@ Question: {question}
             chain_type_kwargs=chain_type_kwargs,
             return_source_documents=True,
         )
-        print("✅ Chat initialized successfully")
+        print("Chat initialized successfully")
 
     def query(self, prompt):
         print(f"\n{'='*60}")
-        print(f"🔍 [QUERY START] prompt: {prompt[:100]}...")
+        print(f"[QUERY START] prompt: {prompt[:100]}...")
         t0 = time.time()
 
-        print("⏳ [RETRIEVER] Calling qa_chain.invoke()...")
+        print("[RETRIEVER] Calling qa_chain.invoke()...")
         try:
             result = self.qa_chain.invoke(prompt)
         except Exception as e:
-            print(f"❌ [CHAIN ERROR] {type(e).__name__}: {e}")
+            print(f"[CHAIN ERROR] {type(e).__name__}: {e}")
             raise
         t1 = time.time()
-        print(f"✅ [CHAIN DONE] took {t1-t0:.2f}s")
+        print(f"[CHAIN DONE] took {t1-t0:.2f}s")
         print(f"   result keys: {list(result.keys()) if isinstance(result, dict) else type(result)}")
         if isinstance(result, dict) and 'source_documents' in result:
             print(f"   source_documents count: {len(result['source_documents'])}")
         if isinstance(result, dict) and 'result' in result:
             print(f"   answer preview: {str(result['result'])[:200]}")
 
-        print("⏳ [PROCESSING] Calling process_llm_response()...")
+        print("[PROCESSING] Calling process_llm_response()...")
         try:
             response = process_llm_response(result)
         except Exception as e:
-            print(f"❌ [PROCESS ERROR] {type(e).__name__}: {e}")
+            print(f"[PROCESS ERROR] {type(e).__name__}: {e}")
             raise
-        print(f"✅ [DONE] Total query time: {time.time()-t0:.2f}s")
+        print(f"[DONE] Total query time: {time.time()-t0:.2f}s")
         print(f"{'='*60}\n")
         return response

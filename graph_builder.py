@@ -279,9 +279,9 @@ class GraphBuilder:
             df = df[~df["id"].isin(processed_ids)]
             skipped = before - len(df)
             if skipped > 0:
-                print(f"⚡ Skipping {skipped} already-processed pages, {len(df)} remaining.")
+                print(f"Skipping {skipped} already-processed pages, {len(df)} remaining.")
             if len(df) == 0:
-                print("✅ All pages already have entities extracted.")
+                print("All pages already have entities extracted.")
                 return
 
         llm_type, llm_client = get_llm()
@@ -405,10 +405,10 @@ def main():
     builder = GraphBuilder(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
     try:
         if full_rebuild:
-            print("🔄 Full rebuild mode (--full flag)")
+            print("Full rebuild mode (--full flag)")
             builder.clear_graph()
         else:
-            print("⚡ Incremental mode (use --full to rebuild from scratch)")
+            print("Incremental mode (use --full to rebuild from scratch)")
 
         builder.create_constraints()
 
@@ -425,7 +425,7 @@ def main():
         # Phase 4: Community detection
         builder.assign_communities()
 
-        print("\n✅ Knowledge graph built successfully!")
+        print("\nKnowledge graph built successfully!")
         print("Open Neo4j Browser at http://localhost:7474 to explore.")
         print("Try: MATCH (p:Page)-[r]->(q) RETURN p, r, q LIMIT 50")
     finally:

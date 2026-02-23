@@ -1,25 +1,73 @@
-# Baymax - RAG System
+# Baymax - GraphRAG System
 
-This RAG system fetches information from your private Confluence as a CSV file, vectorizes and stores the embeddings in ChromaDB, and then uses it via Streamlit or as a Slack bot, interpreting the result with Llama 3.
+This RAG system fetches information from your private Confluence as a CSV file, vectorizes and stores the embeddings in ChromaDB, and then uses it via Streamlit or as a Slack bot, interpreting the result with Llama 4 Scout or Qwen3.
 
 **GraphRAG mode** adds a Neo4j knowledge graph for richer, relationship-aware retrieval — surfacing related pages, shared entities, and topic communities that flat vector search would miss.
 
 ## Architecture
 
-### Standard RAG Pipeline
+### GraphRAG Pipeline
 ```
-Confluence API → app_confluence.py → CSV → index_generator.py → ChromaDB → chat.py → LLM → Streamlit/Slack
+flowchart LR
+    classDef confluence fill:#fdfd96,stroke:#333,stroke-width:2px;
+    classDef chroma fill:#e8f4f8,stroke:#333,stroke-width:2px;
+    classDef neo4j fill:#f0d9ff,stroke:#333,stroke-width:2px;
+    classDef chat fill:#e6f7e6,stroke:#333,stroke-width:2px;
+
+    subgraph Phase1 ["① Extraction — app_confluence.py"]
+        direction TB
+        A1[(Confluence)] --> A2[Fetch Pages & Content]
+        A2 --> A3[Filter 'internal_only' labels]
+        A3 --> A4[Extract Links & Hierarchy]
+        A4 --> A5[(kb.csv)]
+        A4 --> A6[(page_hierarchy.csv)]
+        A4 --> A7[(page_links.csv)]
+    end
+    class Phase1 confluence;
+
+    subgraph Phase2 ["② Vector Indexing — index_generator.py"]
+        direction TB
+        B1[Clean & Convert Schema] --> B2[Embed with bge-m3]
+        B2 --> B3[(ChromaDB)]
+    end
+    class Phase2 chroma;
+
+    subgraph Phase3 ["③ Graph Building — graph_builder.py"]
+        direction TB
+        C1[Page Nodes] --> C2[CHILD_OF edges]
+        C2 --> C3[LINKS_TO edges]
+        C3 --> C4[Llama4\nEntities & Relations]
+        C4 --> C5[Community Detection]
+        C5 --> C6[(Neo4j)]
+    end
+    class Phase3 neo4j;
+
+    subgraph Phase4 ["④ Hybrid Retrieval & Chat — chat.py / graph_retriever.py"]
+        direction TB
+        D1([User Question]) --> D2[Embed Question]
+        D2 --> D3[1· Vector Search\nChromaDB top-K]
+        D3 --> D4[2· Graph Expansion\nNeo4j 1-hop + Communities]
+        D4 --> D5[3· Merge Docs]
+        D5 --> D6{Reranker?}
+        D6 -- Yes --> D7[BGE Cross-Encoder]
+        D6 -- No  --> D8[Top-N Context]
+        D7 --> D8
+        D8 --> D9[Build Prompt]
+        D9 --> D10((Llama4))
+        D10 --> D11([Response])
+    end
+    class Phase4 chat;
+
+    %% Inter-phase edges
+    A5 --> Phase2
+    A5 -.-> C1
+    A6 -.-> C2
+    A7 -.-> C3
+    B3 -.-> D3
+    C6 -.-> D4
 ```
 
-### GraphRAG Pipeline (enhanced)
-```
-Confluence API → app_confluence.py → CSV + hierarchy + links
-                                      ├── index_generator.py → ChromaDB ──┐
-                                      └── graph_builder.py → Neo4j ───────┤
-                                                                          ├── GraphRetriever → LLM → Streamlit/Slack
-```
-
-![RAG Flow Chart](./rag_flowchart.png)
+![GraphRAG Flow Chart](./diagram.svg)
 
 ## Requirements
 
@@ -27,7 +75,7 @@ Confluence API → app_confluence.py → CSV + hierarchy + links
 - Python packages listed in `requirements.txt`
 - `.env` file (see `.env.example`)
 - Docker (for Neo4j, if using GraphRAG)
-- If you are using a fully local installation, install Llama3 (it should require a good GPU in your system)
+- If you are using a fully local installation, install qwen3:14b (it should require a good GPU in your system)
 
 ## Demo
 
@@ -70,7 +118,7 @@ This starts Neo4j Community 5 with the Graph Data Science plugin. Access the bro
 
 Default credentials: `neo4j` / `changeme` (change `NEO4J_PASSWORD` in your `.env`).
 
-## Llama3 with Ollama
+## qwen3:14b with Ollama
 
 Install Ollama in your system
 (https://github.com/ollama/ollama)
@@ -79,11 +127,13 @@ Install Ollama in your system
 curl -fsSL https://ollama.com/install.sh | sh
 ```
 
-Download llama4 and start the ollama server
+Download qwen3:14b and start the ollama server
 ```sh
-ollama pull llama4
+ollama pull qwen3:14b
 ollama serve
 ```
+
+Note: qwen3:14b is better than llama4 for local because llama4 is massive and requires a lot of VRAM
 
 ## Llama4 with Groq
 
