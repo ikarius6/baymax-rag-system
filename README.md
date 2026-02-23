@@ -150,6 +150,14 @@ To get your own `CONFLUENCE_TOKEN`
 - Generate a new token
 - Add it to `CONFLUENCE_TOKEN` in your `.env`
 
+## Github Token
+
+To get your own GITHUB_TOKEN
+
+- Go to https://github.twdcgrid.net/settings/tokens/new
+- Generate a new token with 'public_repo' scope
+- Add it to GITHUB_TOKEN in your .env
+
 ## Slack Setup
 
 Import the `slack_manifest.yml` to your Slack App, then get your access tokens for your `.env` file.
@@ -170,10 +178,24 @@ python app_confluence.py
 
 This creates `data/kb.csv`, `data/page_hierarchy.csv`, and `data/page_links.csv`.
 
+### 1.2 Fetch Data from Github (optional)
+Require: [Github Token](#github-token)
+
+Run `app_github.py` to fetch readme data from Github and save it as a CSV file, you can change the `GITHUB_ORG_NAME` from [CLU](https://github.twdcgrid.net/CLU) to another one in the `.env` file, the process could take a few minutes:
+
+```sh
+python app_github.py
+```
+
+This process going to create data/github.csv file with all the necessary data for the next step.
+
 **Subsequent runs are incremental** — only new/modified pages are fetched:
 ```sh
 python app_confluence.py          # Incremental (default)
 python app_confluence.py --full   # Force full re-download
+
+python app_github.py          # Incremental (default)
+python app_github.py --full   # Force full re-download
 ```
 
 ### 2. Generate Embeddings

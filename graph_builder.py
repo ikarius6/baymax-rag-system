@@ -26,6 +26,7 @@ NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "changeme")
 
 KB_CSV = "./data/kb.csv"
+GITHUB_CSV = "./data/github.csv"
 HIERARCHY_CSV = "./data/page_hierarchy.csv"
 LINKS_CSV = "./data/page_links.csv"
 
@@ -412,15 +413,23 @@ def main():
 
         builder.create_constraints()
 
+        data_sources = [KB_CSV, GITHUB_CSV]
+
         # Phase 1: Create/update page nodes (MERGE handles upserts)
-        builder.create_page_nodes(KB_CSV)
+        for src in data_sources:
+            if os.path.exists(src):
+                print(f"Processing page nodes from {src}...")
+                builder.create_page_nodes(src)
 
         # Phase 2: Create structural relationships (MERGE handles duplicates)
         builder.create_hierarchy_relationships(HIERARCHY_CSV)
         builder.create_link_relationships(LINKS_CSV)
 
         # Phase 3: Extract entities — skip pages already processed
-        builder.extract_and_store_entities(KB_CSV, skip_existing=not full_rebuild)
+        for src in data_sources:
+            if os.path.exists(src):
+                print(f"Extracting entities from {src}...")
+                builder.extract_and_store_entities(src, skip_existing=not full_rebuild)
 
         # Phase 4: Community detection
         builder.assign_communities()

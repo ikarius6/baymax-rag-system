@@ -17,7 +17,7 @@ def import_csv(df, csv_file, max_rows):
     
     try:
         # Attempt to read the CSV file
-        df = pd.read_csv(csv_file, usecols=['id', 'tiny_link', 'content'], nrows=max_rows)
+        new_data = pd.read_csv(csv_file, usecols=['id', 'tiny_link', 'content', 'type'], nrows=max_rows)
     except FileNotFoundError:
         return "Error: CSV file not found."
     except PermissionError:
@@ -26,14 +26,17 @@ def import_csv(df, csv_file, max_rows):
         return f"Error: An unexpected error occurred while reading the CSV file. ({e})"
     
     # Check if DataFrame is empty
-    if df.empty:
+    if new_data.empty:
         return "Error: No data found in the CSV file."
     
+    # Append the new data to the existing DataFrame
+    df = pd.concat([df, new_data], ignore_index=True)
+
     return df
 
 def clean_data_schema(df):
     # Ensure necessary columns are present
-    required_columns = {'id', 'tiny_link', 'content'}
+    required_columns = {'id', 'tiny_link', 'content', 'type'}
     if not required_columns.issubset(df.columns):
         missing_columns = required_columns - set(df.columns)
         return f"Error: CSV file is missing required columns: {missing_columns}"
@@ -49,7 +52,7 @@ def clean_data_schema(df):
     df = df.copy()
     df['id'] = df['id'].apply(str)
     df.rename(columns={'tiny_link': 'source'}, inplace=True)
-    df['metadata'] = df.apply(lambda row: json.dumps({'source': row['source'], 'text': row['content']}), axis=1)
+    df['metadata'] = df.apply(lambda row: json.dumps({'source': row['source'], 'text': row['content'], 'type': row['type']}), axis=1)
     df = df[['id', 'metadata']]
     # print(df.head())
     print("Done: Dataset retrieved")
@@ -165,5 +168,14 @@ def process_llm_response(llm_response):
     response = wrap_text_preserve_newlines(llm_response['result'])
     response += '\n\nSources:'
     for source in llm_response["source_documents"]:
-        response += '\n'+ os.environ.get("CONFLUENCE_DOMAIN") + source.metadata['source']
+        doc_type = source.metadata.get('type', 'page')  # Default to page for old records
+        src_url = source.metadata.get('source', '')
+        if doc_type == 'page':
+            domain = os.environ.get("CONFLUENCE_DOMAIN", "")
+            if not src_url.startswith('http'):
+                response += '\n' + domain + src_url
+            else:
+                response += '\n' + src_url
+        elif doc_type == 'repo':
+            response += '\n' + src_url
     return response

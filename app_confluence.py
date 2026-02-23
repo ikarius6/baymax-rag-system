@@ -252,6 +252,9 @@ def add_content_to_dataframe(df, all_page_ids=None):
         else:
             print(f"Warning: Could not fetch content for page ID {page_id}.")
 
+        # Add a delay between requests to avoid hitting rate limits
+        # time.sleep(1)
+
     return df, all_links
 
 def save_dataframe_to_csv(df, filename):
@@ -318,11 +321,11 @@ def main():
     last_sync = None if full_sync else load_sync_state()
 
     if full_sync:
-        print("🔄 Full sync mode (--full flag)")
+        print("Full sync mode (--full flag)")
     elif last_sync:
-        print(f"⚡ Incremental sync (changes since {last_sync})")
+        print(f"Incremental sync (changes since {last_sync})")
     else:
-        print("🔄 First run — full sync")
+        print("First run — full sync")
 
     print(f"Fetching '{team_key}' page ID...")
     team_page_id = fetch_team_page_id()
@@ -354,11 +357,11 @@ def main():
         pages_to_process = changed_ids | new_ids
 
         if not pages_to_process:
-            print("✅ No new or modified pages found. Nothing to sync.")
+            print("No new or modified pages found. Nothing to sync.")
             save_sync_state()
             return
 
-        print(f"⚡ Processing {len(pages_to_process)} new/modified pages (skipping {len(df) - len(pages_to_process)} unchanged)")
+        print(f"Processing {len(pages_to_process)} new/modified pages (skipping {len(df) - len(pages_to_process)} unchanged)")
 
         # Only fetch content for changed pages
         df_to_fetch = df.loc[df.index.isin(pages_to_process)]
@@ -384,7 +387,7 @@ def main():
     save_hierarchy_csv(df)
     save_links_csv(cross_links)
     save_sync_state()
-    print(f"✅ Sync complete. State saved to {SYNC_STATE_FILE}")
+    print(f"Sync complete. State saved to {SYNC_STATE_FILE}")
 
 if __name__ == "__main__":
     main()
