@@ -104,7 +104,7 @@ def add_all_pages_to_dataframe(df, all_pages):
             last_modified = page.get('version', {}).get('when', '')
             new_record = [{
                 'id': page.get('id', ''),
-                'type': page.get('type', ''),
+                'type': page.get('type', 'page'),
                 'status': page.get('status', ''),
                 'tiny_link': page.get('_links', {}).get('tinyui', ''),
                 'title': page.get('title', ''),
