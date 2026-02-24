@@ -262,6 +262,9 @@ python slack.py
 ### `app_confluence.py`
 Fetches pages from Confluence, extracts content, page hierarchy, and cross-page links.
 
+### `app_github.py`
+Fetches readme files from Github, extracts README content.
+
 ### `index_generator.py`
 Generates embeddings using FlagEmbedding (`bge-multilingual-gemma2`) with batch processing and upserts to ChromaDB.
 
