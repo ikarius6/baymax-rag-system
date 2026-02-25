@@ -49,6 +49,7 @@ class Chat:
         vector_store, chroma_client = get_chroma_vector_store(
             "confluence_docs", embed_model, "./chroma_db"
         )
+        self._chroma_client = chroma_client
 
         # --- Retriever ---
         if self.use_graph:
@@ -102,6 +103,15 @@ Question: {question}
             return_source_documents=True,
         )
         print("Chat initialized successfully")
+
+    def close(self):
+        """Release ChromaDB and other resources so files can be replaced."""
+        if hasattr(self, '_chroma_client') and self._chroma_client is not None:
+            try:
+                self._chroma_client._client.close()
+            except Exception:
+                pass
+            self._chroma_client = None
 
     def query(self, prompt):
         print(f"\n{'='*60}")

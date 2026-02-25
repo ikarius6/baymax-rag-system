@@ -223,15 +223,30 @@ MATCH (p:Page)-[r]->(q) RETURN p, r, q LIMIT 50
 
 ### 4. Sharing Pre-Built Databases
 
-You can share your databases so other users skip steps 1-3 entirely:
+Use `data_manager.py` to export/import all collected data (`data/`, `chroma_db/`, and Neo4j graph) as a single zip file. This lets other users skip the heavy scraping, embedding, and graph-building steps entirely.
 
-- **ChromaDB**: Copy the `./chroma_db/` folder
-- **Neo4j**: Export the Docker volume or use `apoc.export`
-- **CSV Data**: Copy the `./data/` folder
+#### Export
+```sh
+python data_manager.py export              # -> backups/baymax_backup_<timestamp>.zip
+python data_manager.py export my_backup    # -> backups/my_backup.zip
+```
+
+#### Import
+```sh
+python data_manager.py import backups/my_backup.zip
+```
+
+#### List available backups
+```sh
+python data_manager.py list
+```
+
+You can also export and import directly from the **Streamlit sidebar** (Data Manager section).
 
 The recipient only needs to:
 ```sh
 docker compose up -d
+python data_manager.py import backups/<backup_name>.zip
 streamlit run streamlit.py -- --use-graph
 ```
 
@@ -277,8 +292,11 @@ Hybrid retriever combining vector search + graph expansion + community context +
 ### `chat.py`
 Query logic with `--use-graph` toggle for switching between standard and GraphRAG retrieval.
 
+### `data_manager.py`
+Export/import all collected data (`data/`, `chroma_db/`, Neo4j graph) as a single zip file. CLI and Streamlit sidebar support.
+
 ### `streamlit.py`
-Streamlit user interface.
+Streamlit user interface with Data Manager sidebar for export/import.
 
 ### `slack.py`
 Slack integration.
