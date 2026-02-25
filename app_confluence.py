@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from tqdm import tqdm
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from pathlib import Path
 
 # Load environment variables from .env file
 load_dotenv(override=True)
@@ -19,10 +20,28 @@ confluence_token = os.getenv("CONFLUENCE_TOKEN")
 space_key = os.getenv("CONFLUENCE_SPACE_KEY")
 team_key = os.getenv("CONFLUENCE_TEAM_KEY")
 
-# TODO: Implement Hulu SSO Login
-# Get cookie.txt with the session to avoid SSO issues
-with open('cookie.txt', 'r') as file:
-    cookie = file.read()
+COOKIE_FILE = Path("cookie.txt")
+
+def _load_cookies(session, domain):
+    """Parse cookie.txt and load cookies into the session cookie jar."""
+    if not COOKIE_FILE.exists():
+        print(f"Warning: {COOKIE_FILE} not found — using Bearer token only.")
+        return
+    raw = COOKIE_FILE.read_text().strip()
+    if not raw:
+        print(f"Warning: {COOKIE_FILE} is empty — using Bearer token only.")
+        return
+    parsed = urlparse(domain)
+    cookie_domain = parsed.hostname  # e.g. confluence.disney.com
+    count = 0
+    for pair in raw.split(";"):
+        pair = pair.strip()
+        if "=" not in pair:
+            continue
+        name, value = pair.split("=", 1)
+        session.cookies.set(name.strip(), value.strip(), domain=cookie_domain)
+        count += 1
+    print(f"Auth mode: cookie.txt ({count} cookies loaded for {cookie_domain})")
 
 # Function to create a session with retry strategy
 def create_session_with_retries():
@@ -35,25 +54,54 @@ def create_session_with_retries():
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
+    _load_cookies(session, confluence_domain)
     return session
 
 session = create_session_with_retries()
 
 # Function to make an API call
 def api_call(url):
+    headers = {"Accept": "application/json"}
+
     try:
-        response = session.get(url, headers={'Authorization': "Bearer " + confluence_token, 'Cookie': cookie})
-        response.raise_for_status()
+        response = session.get(url, headers=headers, allow_redirects=False, timeout=30)
+
+        # SSO/auth failures often return redirects or HTML pages (not JSON).
+        if 300 <= response.status_code < 400:
+            location = response.headers.get("Location", "<missing>")
+            print(f"Redirected ({response.status_code}) to {location}")
+            return None
+
         if response.status_code == 200:
-            return response.json()
+            content_type = response.headers.get("Content-Type", "")
+            if "application/json" not in content_type.lower():
+                snippet = response.text[:250].replace("\n", " ")
+                print(
+                    "Unexpected non-JSON response: "
+                    f"status={response.status_code}, content-type={content_type}, "
+                    f"url={response.url}, body[:250]={snippet!r}"
+                )
+                return None
+            try:
+                return response.json()
+            except ValueError:
+                snippet = response.text[:250].replace("\n", " ")
+                print(
+                    "Invalid JSON payload: "
+                    f"status={response.status_code}, content-type={content_type}, "
+                    f"url={response.url}, body[:250]={snippet!r}"
+                )
+                return None
         elif response.status_code == 404:
             print("Error: Page not found.")
         elif response.status_code == 401:
             print("Error: Authentication failed.")
+        elif response.status_code == 403:
+            print("Error: Forbidden (missing permission or invalid SSO session).")
         elif response.status_code == 500:
             print("Error: Internal server error.")
         else:
-            print(f"Failed to get pages: HTTP status code {response.status_code}")
+            print(f"Failed to get pages: HTTP status code {response.status_code} (url={response.url})")
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")
 
@@ -332,6 +380,10 @@ def main():
     if not team_page_id:
         print(f"Failed to fetch '{team_key}' page ID. Exiting.")
         return
+    
+    print(f"Team page ID: {team_page_id}")
+
+    sys.exit(0)   
 
     print(f"Fetching all pages under '{team_key}'...")
     all_pages = fetch_all_pages_recursively(team_page_id, [])
