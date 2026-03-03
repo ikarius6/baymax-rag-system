@@ -32,7 +32,7 @@ def _load_cookies(session, domain):
         print(f"Warning: {COOKIE_FILE} is empty — using Bearer token only.")
         return
     parsed = urlparse(domain)
-    cookie_domain = parsed.hostname  # e.g. confluence.disney.com
+    cookie_domain = parsed.hostname  # e.g. confluence.<yourdomain>.com
     count = 0
     for pair in raw.split(";"):
         pair = pair.strip()
