@@ -32,9 +32,9 @@ class Chat:
                 model=chat_model or "meta-llama/llama-4-scout-17b-16e-instruct",
             )
         else:
-            # ollama qwen3.5:9b for local
+            # ollama qwen3:14b for local
             llm = Ollama(
-                model=chat_model or "qwen3.5:9b",
+                model=chat_model or "qwen3:14b",
                 temperature=0,
                 base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
             )

@@ -75,7 +75,7 @@ flowchart LR
 - Python packages listed in `requirements.txt`
 - `.env` file (see `.env.example`)
 - Docker (for Neo4j, if using GraphRAG)
-- If you are using a fully local installation, install qwen3.5:9b (it should require a good GPU in your system)
+- If you are using a fully local installation, install qwen3:14b (it should require a good GPU in your system)
 
 ## Demo
 
@@ -221,7 +221,7 @@ This starts Neo4j Community 5 with the Graph Data Science plugin. Access the bro
 
 Default credentials: `neo4j` / `changeme` (change `NEO4J_PASSWORD` in your `.env`).
 
-## qwen3.5:9b with Ollama
+## qwen3:14b with Ollama
 
 Install Ollama in your system
 (https://github.com/ollama/ollama)
@@ -230,13 +230,13 @@ Install Ollama in your system
 curl -fsSL https://ollama.com/install.sh | sh
 ```
 
-Download qwen3.5:9b and start the ollama server
+Download qwen3:14b and start the ollama server
 ```sh
-ollama pull qwen3.5:9b
+ollama pull qwen3:14b
 ollama serve
 ```
 
-Note: qwen3.5:9b is better than llama4 for local because llama4 is massive and requires a lot of VRAM
+Note: qwen3:14b is better than llama4 for local because llama4 is massive and requires a lot of VRAM
 
 ## Llama4 with Groq
 
