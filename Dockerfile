@@ -17,10 +17,19 @@ WORKDIR /app
 # Copy requirements first so this layer is cached unless requirements change.
 COPY requirements.txt .
 
-# Install CPU-only PyTorch first (much smaller than the CUDA build)
-RUN pip install --no-cache-dir \
-        torch torchvision torchaudio \
-        --index-url https://download.pytorch.org/whl/cpu
+# TORCH_VARIANT controls which PyTorch build is installed:
+#   cpu   (default) — works everywhere, no GPU required
+#   cu128           — CUDA 12.8, requires an NVIDIA GPU + nvidia-container-toolkit on the host
+ARG TORCH_VARIANT=cpu
+RUN if [ "$TORCH_VARIANT" = "cpu" ]; then \
+        pip install --no-cache-dir \
+            torch torchvision torchaudio \
+            --index-url https://download.pytorch.org/whl/cpu; \
+    else \
+        pip install --no-cache-dir \
+            --pre torch torchvision torchaudio \
+            --index-url https://download.pytorch.org/whl/nightly/${TORCH_VARIANT}; \
+    fi
 
 # Install the rest of the packages
 RUN pip install --no-cache-dir -r requirements.txt

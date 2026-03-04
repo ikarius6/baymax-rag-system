@@ -166,8 +166,23 @@ If you have a pre-built backup zip to share with a teammate:
 
 ### Notes
 
-- **CPU-only mode**: The Docker image uses CPU-only PyTorch for broad compatibility. Inference is slightly slower than GPU, but fully functional for most teams.
+- **CPU-only mode (default)**: The Docker image uses CPU-only PyTorch for broad compatibility. Inference is slightly slower than GPU, but fully functional for most teams.
 - **Ollama / local LLM**: If you want to use a local Ollama model instead of Groq, Ollama must run on your host machine. Set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in your `.env` and leave `GROQ_API_KEY` empty.
+
+### GPU / CUDA build (for users with an NVIDIA GPU)
+
+If you have an NVIDIA GPU and want faster embedding inference, use the CUDA override:
+
+**Host prerequisites** (one-time setup):
+1. NVIDIA drivers installed
+2. [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed and Docker restarted
+
+**Build and run with GPU support:**
+```sh
+docker compose -f docker-compose.yml -f docker-compose.cuda.yml up --build
+```
+
+This installs the CUDA 12.8 PyTorch build and passes your GPU into the container. `chat.py` automatically detects CUDA via `torch.cuda.is_available()` — no code changes needed.
 
 ## Setup (Advanced - Local Installation)
 
