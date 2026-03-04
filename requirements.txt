@@ -19,6 +19,7 @@ slack_bolt
 slack_sdk
 sentence_transformers
 langchain-chroma
+langchain-huggingface
 markdown
 
 # GraphRAG additions

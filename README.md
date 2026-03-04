@@ -75,13 +75,101 @@ flowchart LR
 - Python packages listed in `requirements.txt`
 - `.env` file (see `.env.example`)
 - Docker (for Neo4j, if using GraphRAG)
-- If you are using a fully local installation, install qwen3:14b (it should require a good GPU in your system)
+- If you are using a fully local installation, install qwen3.5:9b (it should require a good GPU in your system)
 
 ## Demo
 
 ![RAG Flow Chart](./baymax_1.gif)
 
-## Setup
+## Running with Docker (Recommended for most users)
+
+Docker bundles the Streamlit chat interface, all Python dependencies, and Neo4j into a single command — no Python installation required.
+
+### Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
+- A **Groq API key** (optional): [console.groq.com/keys](https://console.groq.com/keys)
+
+### Step 1 — Configure your environment
+
+Copy the example env file and fill in your credentials:
+
+```sh
+cp .env.example .env
+```
+
+Open `.env` and set at minimum:
+
+```env
+GROQ_API_KEY="gsk_..."           # optional — your free Groq key
+NEO4J_PASSWORD="changeme"        # optional — change if you want a custom password
+```
+
+> **Note:** You do **not** need to change `NEO4J_URI` — Docker sets it automatically to reach the database container.
+
+### Step 2 — Start everything
+
+```sh
+docker compose up --build
+```
+
+The first run will download images and install Python packages (~5 minutes). Subsequent starts are fast.
+
+You'll see the app is ready when you see:
+
+```
+baymax-streamlit  |   You can now view your Streamlit app in your browser.
+baymax-streamlit  |   URL: http://0.0.0.0:8501
+```
+
+### Step 3 — Open the chat
+
+**[http://localhost:8501](http://localhost:8501)** — Baymax chat interface
+
+**[http://localhost:7474](http://localhost:7474)** — Neo4j Browser (optional, for graph exploration)
+
+### Stopping and restarting
+
+```sh
+# Stop all services (data is preserved in volumes)
+docker compose down
+
+# Start again without rebuilding (also re-reads .env)
+docker compose up -d
+
+# Rebuild the image (e.g. after updating source code or requirements.txt)
+docker compose up --build -d
+```
+
+> **Changed something in `.env`?** Use `docker compose up -d` — it recreates the container and re-reads the `.env` file.
+> `docker compose restart` does **not** re-read `.env`; it reuses the environment frozen at container creation.
+
+### Data persistence
+
+Your embeddings, source data, and backups are **mounted from your local filesystem** into the container:
+
+| Local folder | What it stores |
+|---|---|
+| `./chroma_db/` | Vector embeddings (ChromaDB) |
+| `./data/` | Fetched CSV files from Confluence / GitHub |
+| `./backups/` | Export/import zip archives |
+
+Deleting the container does **not** delete these folders. Use the **Data Manager** in the Streamlit sidebar to export and import a full backup zip (including Neo4j graph data).
+
+### Restoring a backup inside Docker
+
+If you have a pre-built backup zip to share with a teammate:
+
+1. Place the `.zip` file inside the `backups/` folder.
+2. Open [http://localhost:8501](http://localhost:8501) and use the **Data Manager** sidebar → _"Existing backups"_ → select and restore.
+3. The page will prompt you to restart — run `docker compose restart streamlit`.
+
+### Notes
+
+- **CPU-only mode**: The Docker image uses CPU-only PyTorch for broad compatibility. Inference is slightly slower than GPU, but fully functional for most teams.
+- **Ollama / local LLM**: If you want to use a local Ollama model instead of Groq, Ollama must run on your host machine. Set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in your `.env` and leave `GROQ_API_KEY` empty.
+
+## Setup (Advanced - Local Installation)
 
 Clone the repository.
 
@@ -118,7 +206,7 @@ This starts Neo4j Community 5 with the Graph Data Science plugin. Access the bro
 
 Default credentials: `neo4j` / `changeme` (change `NEO4J_PASSWORD` in your `.env`).
 
-## qwen3:14b with Ollama
+## qwen3.5:9b with Ollama
 
 Install Ollama in your system
 (https://github.com/ollama/ollama)
@@ -127,13 +215,13 @@ Install Ollama in your system
 curl -fsSL https://ollama.com/install.sh | sh
 ```
 
-Download qwen3:14b and start the ollama server
+Download qwen3.5:9b and start the ollama server
 ```sh
-ollama pull qwen3:14b
+ollama pull qwen3.5:9b
 ollama serve
 ```
 
-Note: qwen3:14b is better than llama4 for local because llama4 is massive and requires a lot of VRAM
+Note: qwen3.5:9b is better than llama4 for local because llama4 is massive and requires a lot of VRAM
 
 ## Llama4 with Groq
 
@@ -305,4 +393,4 @@ Slack integration.
 Helper methods for ChromaDB, embeddings, and response processing.
 
 ### `docker-compose.yml`
-Docker Compose configuration for Neo4j.
+Docker Compose configuration for Neo4j and the Streamlit app. Run with `docker compose up --build`.

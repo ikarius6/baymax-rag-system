@@ -38,6 +38,9 @@ class GraphRetriever(BaseRetriever):
     class Config:
         arbitrary_types_allowed = True
 
+    def model_post_init(self, __context: Any) -> None:
+        print(f"[GraphRetriever] initialized — use_reranker={self.use_reranker}")
+
     def _get_neo4j_driver(self):
         return GraphDatabase.driver(self.neo4j_uri, auth=(self.neo4j_user, self.neo4j_password))
 

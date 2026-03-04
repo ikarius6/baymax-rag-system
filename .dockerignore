@@ -1,0 +1,27 @@
+# Virtual environment — never copy into the image
+venv/
+
+# Git history
+.git/
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local secrets — injected at runtime via .env
+.env
+
+# Persisted data — mounted as volumes at runtime
+chroma_db/
+chroma_db_import/
+data/
+backups/
+
+# Large binary files not needed at runtime
+*.gif
+
+# Local config override
+application-vault-local.properties
+cookie.txt

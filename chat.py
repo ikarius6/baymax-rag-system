@@ -3,7 +3,8 @@ import sys
 import time
 from langchain_classic.chains import RetrievalQA
 from langchain_classic.prompts import PromptTemplate
-from langchain_community.embeddings.huggingface import HuggingFaceBgeEmbeddings
+import torch
+from langchain_huggingface import HuggingFaceEmbeddings
 from utils import get_chroma_vector_store, process_llm_response
 from langchain_community.llms.ollama import Ollama
 from langchain_groq import ChatGroq
@@ -31,17 +32,20 @@ class Chat:
                 model=chat_model or "meta-llama/llama-4-scout-17b-16e-instruct",
             )
         else:
-            # ollama qwen3:14b for local
+            # ollama qwen3.5:9b for local
             llm = Ollama(
-                model=chat_model or "qwen3:14b",
+                model=chat_model or "qwen3.5:9b",
                 temperature=0,
                 base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
             )
 
         # --- Embedding model ---
-        embed_model = HuggingFaceBgeEmbeddings(
+        # Auto-detect device: use CUDA when available (local GPU), fall back to CPU (Docker / no GPU)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"[EMBED] Using device: {device}")
+        embed_model = HuggingFaceEmbeddings(
             model_name="BAAI/bge-m3",
-            model_kwargs={"device": "cuda"},
+            model_kwargs={"device": device},
             encode_kwargs={"normalize_embeddings": True},
         )
 
