@@ -25,3 +25,11 @@ markdown
 # GraphRAG additions
 neo4j
 groq
+
+# REST API server (api.py)
+fastapi
+uvicorn[standard]
+
+# GitHub Copilot / OpenAI-compatible LLM provider
+langchain-openai
+httpx

@@ -16,3 +16,8 @@ pip-delete-this-directory.txt
 # Environments
 .env
 venv/
+application-vault-local.properties
+
+# VS Code extension
+vscode-extension/out
+vscode-extension/node_modules

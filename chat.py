@@ -10,6 +10,13 @@ from langchain_community.llms.ollama import Ollama
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 
+# Copilot uses an OpenAI-compatible endpoint – import lazily to avoid a hard
+# dependency when the Copilot provider is not used.
+try:
+    from langchain_openai import ChatOpenAI as _ChatOpenAI
+except ImportError:
+    _ChatOpenAI = None
+
 
 class Chat:
     def __init__(self, source, use_graph=None):
@@ -26,7 +33,38 @@ class Chat:
 
         # --- LLM ---
         chat_model = os.getenv("CHAT_MODEL", "")
-        if os.getenv("GROQ_API_KEY") and os.getenv("GROQ_API_KEY") != "":
+        copilot_key = os.getenv("COPILOT_API_KEY", "")
+
+        if copilot_key or chat_model.lower().startswith("copilot"):
+            # ------------------------------------------------------------------
+            # GitHub Copilot (OpenAI-compatible endpoint)
+            # Requires: pip install langchain-openai
+            # .env keys:
+            #   COPILOT_API_KEY   – your GitHub Copilot token
+            #   COPILOT_BASE_URL  – defaults to the public Copilot proxy
+            #   CHAT_MODEL        – e.g. "copilot" or "copilot/gpt-4o"
+            # ------------------------------------------------------------------
+            if _ChatOpenAI is None:
+                raise ImportError(
+                    "langchain-openai is required for the Copilot provider. "
+                    "Run: pip install langchain-openai"
+                )
+            copilot_base_url = os.getenv(
+                "COPILOT_BASE_URL",
+                "https://api.githubcopilot.com",
+            )
+            # Strip the 'copilot/' prefix if present, default to gpt-4o
+            model_name = chat_model.removeprefix("copilot/").replace("copilot", "").strip()
+            model_name = model_name or os.getenv("COPILOT_MODEL", "gpt-4o")
+            llm = _ChatOpenAI(
+                model=model_name,
+                temperature=0,
+                openai_api_key=copilot_key,
+                openai_api_base=copilot_base_url,
+            )
+            print(f"[LLM] Using GitHub Copilot endpoint → model: {model_name}")
+
+        elif os.getenv("GROQ_API_KEY") and os.getenv("GROQ_API_KEY") != "":
             llm = ChatGroq(
                 temperature=0,
                 model=chat_model or "meta-llama/llama-4-scout-17b-16e-instruct",

@@ -1,0 +1,85 @@
+{
+  "name": "baymax-chat",
+  "displayName": "Baymax Chat",
+  "description": "Chat with your company RAG system (Baymax) directly inside VS Code",
+  "version": "0.1.0",
+  "publisher": "ikarius6",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ikarius6/baymax-rag-system"
+  },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "baymax.openChat",
+        "title": "Baymax: Open Chat",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "baymax.clearHistory",
+        "title": "Baymax: Clear Conversation History"
+      },
+      {
+        "command": "baymax.checkHealth",
+        "title": "Baymax: Check API Health"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "baymax.openChat",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Baymax Chat",
+      "properties": {
+        "baymax.apiUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8888",
+          "description": "Base URL of the Baymax FastAPI server (api.py)"
+        },
+        "baymax.showSources": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show source document references below answers"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "baymax",
+          "title": "Baymax",
+          "icon": "media/baymax-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "baymax": [
+        {
+          "type": "webview",
+          "id": "baymax.chatView",
+          "name": "Chat"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}
