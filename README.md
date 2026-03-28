@@ -245,6 +245,13 @@ To use a remote version of Llama4, enable the Grop API by getting your own `GROQ
 - Generate a new token
 - Ad it to `GROQ_API_KEY` in your `.env` 
 
+## Copilot Setup
+
+To use Copilot instead, enable it in your `.env` file by setting the following variables:
+- `COPILOT_API_KEY` - Your GitHub Copilot API key
+- `COPILOT_BASE_URL` - The base URL for the Copilot API (default: https://api.githubcopilot.com)
+- `COPILOT_MODEL` - The model to use (default: gpt-4o)
+
 ## Confluence Token
 
 To get your own `CONFLUENCE_TOKEN`
@@ -374,6 +381,28 @@ streamlit run streamlit.py -- --use-graph
 ```sh
 python slack.py
 ```
+
+## VS Code Extension
+
+Baymax also ships as a **VS Code extension** that brings the RAG chat directly into your editor — no browser tab required. Ask questions about your Confluence knowledge base, get source references, and check API health without leaving your IDE.
+
+Key highlights:
+
+- **Activity Bar panel** — open the chat from the sidebar like any built-in VS Code view.
+- **Inline source references** — every answer links back to the original Confluence pages.
+- **Health indicator** — a live status dot shows whether the Baymax API is reachable.
+- **Configurable** — point it at any Baymax API instance via the `baymax.apiUrl` setting.
+
+### Quick start
+
+1. Start the Baymax API server:
+   ```sh
+   .\venv\Scripts\uvicorn api:app --host 127.0.0.1 --port 8888 --reload
+   ```
+2. Open the `vscode-extension/` folder in VS Code, compile, and press **F5**
+2.5. (Optional) Or install the extension from the `.vsix` file if you want to test it outside the development environment.
+
+> For full setup instructions, configuration options, and packaging details see the **[VS Code Extension README](./vscode-extension/README.md)**.
 
 ## Project Files
 
